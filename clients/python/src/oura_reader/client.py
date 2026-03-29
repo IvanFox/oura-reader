@@ -34,7 +34,7 @@ class OuraClient:
     """Client for the oura-reader REST API.
 
     Args:
-        base_url: Server URL (e.g. "http://macmini:8080").
+        base_url: Server URL (e.g. "http://your-server:8080").
         api_key: API key for authentication.
         stale_threshold: Seconds after which data is considered stale
             and a sync is triggered automatically. Set to 0 to disable.
