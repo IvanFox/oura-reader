@@ -23,6 +23,8 @@ source clients/python/.venv/bin/activate && python -m pytest clients/python/test
 
 Multi-user Go service that fetches Oura Ring health data via OAuth2, stores raw JSON in SQLite, and serves it over a REST API. A Python client (`clients/python/`) wraps the API for remote LLM-based analysis.
 
+**Stack:** Go 1.25, chi/v5 (routing), modernc.org/sqlite (pure Go, no CGO), `log/slog` (structured logging), `golang.org/x/oauth2`, `golang.org/x/time/rate`.
+
 ### Dependency Graph
 
 All components are wired in `cmd/oura-reader/main.go` via constructor injection:
@@ -40,7 +42,7 @@ No circular dependencies. Each package depends only on its explicit constructor 
 
 ### Key Design Patterns
 
-**Metadata-driven endpoint registry** (`internal/oura/endpoints.go`): All 18 Oura API endpoints are declared as `EndpointSpec` structs in a `Registry` array. The `Fetch()`, sync, and storage code is written once and driven by metadata (path, hasDate, idField, dayField). Adding an endpoint means adding one line to the registry — no handler code, no new routes.
+**Metadata-driven endpoint registry** (`internal/oura/endpoints.go`): All 18 Oura API endpoints are declared as `EndpointSpec` structs in a `Registry` array. The `Fetch()`, sync, and storage code is written once and driven by metadata (path, hasDate, idField, dayField). Adding an endpoint means adding one line to the registry — no handler code, no new routes. Watch for special cases: `heartrate` uses `timestamp` as DayField (truncated to date) and has no IDField (uses timestamp as unique key); `personal_info` is `IsList: false` (single object, not paginated); `rest_mode_period` uses `start_day` as DayField.
 
 **Multi-user context flow**: API key auth middleware (`internal/server/middleware.go`) hashes the bearer token, looks up the user, and injects `*user.User` into `r.Context()`. All handlers extract the user via `userFromContext(ctx)`. Data is scoped per-user via `user_id` foreign keys with `ON DELETE CASCADE`.
 
@@ -57,6 +59,12 @@ No circular dependencies. Each package depends only on its explicit constructor 
 ### Storage Model
 
 Raw Oura API responses are stored as JSON blobs in `oura_data.data` (TEXT column). Identity columns (`user_id`, `endpoint`, `day`, `oura_id`) are extracted from the JSON at insert time using the endpoint's metadata fields. This avoids per-endpoint schema migrations while still allowing indexed queries. SQLite `json_extract()` is available for ad-hoc queries into the blob.
+
+SQLite is opened with WAL journal mode and foreign keys enabled via connection pragmas. Schema uses `CREATE TABLE IF NOT EXISTS` — no versioned migrations, applied on every startup (`internal/store/migrations.go`).
+
+### Sync Behavior
+
+The scheduler does **incremental syncs**: fetches from `sync_state.last_sync_date` to today per endpoint per user. First sync defaults to 30 days back. Non-date endpoints (like `ring_configuration`, `personal_info`) are re-fetched in full each time. The Oura API client has built-in rate limiting (5000 req/300s with burst of 10) and retries with exponential backoff on 429/5xx responses.
 
 ### Secrets
 
