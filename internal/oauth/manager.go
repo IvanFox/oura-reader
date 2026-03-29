@@ -19,6 +19,7 @@ const (
 var ouraScopes = []string{
 	"email", "personal", "daily", "session",
 	"heartrate", "workout", "tag", "spo2",
+	"stress", "heart_health", "ring_configuration",
 }
 
 type Manager struct {
