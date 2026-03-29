@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 
 	"golang.org/x/oauth2"
@@ -61,7 +63,14 @@ func (m *Manager) LoginURL(userID int64) (string, error) {
 	m.pendingStates[state] = userID
 	m.stateMu.Unlock()
 
-	return m.conf.AuthCodeURL(state), nil
+	v := url.Values{
+		"client_id":     {m.conf.ClientID},
+		"redirect_uri":  {m.conf.RedirectURL},
+		"response_type": {"code"},
+		"scope":         {strings.Join(m.conf.Scopes, " ")},
+		"state":         {state},
+	}
+	return authURL + "?" + v.Encode(), nil
 }
 
 // Exchange handles the OAuth callback: validates state, exchanges code for tokens, persists.
