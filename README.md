@@ -307,6 +307,7 @@ Files take priority over environment variables. Whitespace is trimmed.
 | `OURA_ENCRYPTION_KEY` | — | Fallback if secret file not found |
 | `OURA_DB_PATH` | `data/oura.db` | SQLite database file path |
 | `OURA_LISTEN_ADDR` | `0.0.0.0:8080` | Server bind address |
+| `OURA_BASE_URL` | _(computed)_ | External base URL for OAuth redirect (e.g. `https://your-server.ts.net`) |
 | `OURA_FETCH_INTERVAL` | `6h` | Periodic background sync interval |
 | `OURA_SECRETS_DIR` | `/run/secrets` | Override secret files directory |
 
