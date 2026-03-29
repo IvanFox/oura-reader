@@ -31,8 +31,8 @@ type Manager struct {
 	stateMu       sync.Mutex
 }
 
-func NewManager(clientID, clientSecret, listenAddr string, store *Store) *Manager {
-	redirectURL := fmt.Sprintf("http://%s/api/v1/auth/callback", listenAddr)
+func NewManager(clientID, clientSecret, baseURL string, store *Store) *Manager {
+	redirectURL := baseURL + "/api/v1/auth/callback"
 	return &Manager{
 		conf: &oauth2.Config{
 			ClientID:     clientID,
