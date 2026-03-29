@@ -61,7 +61,7 @@ func (m *Manager) LoginURL(userID int64) (string, error) {
 	m.pendingStates[state] = userID
 	m.stateMu.Unlock()
 
-	return m.conf.AuthCodeURL(state, oauth2.AccessTypeOffline), nil
+	return m.conf.AuthCodeURL(state), nil
 }
 
 // Exchange handles the OAuth callback: validates state, exchanges code for tokens, persists.
