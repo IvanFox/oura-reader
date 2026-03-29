@@ -212,7 +212,7 @@ pip install ".[dev]"
 from oura_reader import OuraClient
 
 client = OuraClient(
-    base_url="http://macmini:8080",
+    base_url="http://your-server:8080",
     api_key="oura_ak_...",
     stale_threshold=3600,  # auto-sync if last sync > 1 hour ago (0 to disable)
 )
@@ -261,7 +261,7 @@ client = OuraClient(base_url="...", api_key="...", stale_threshold=0)
 ### Context Manager
 
 ```python
-with OuraClient(base_url="http://macmini:8080", api_key="oura_ak_...") as client:
+with OuraClient(base_url="http://your-server:8080", api_key="oura_ak_...") as client:
     sleep = client.get_sleep(start_date="2026-03-20")
 ```
 
@@ -307,6 +307,7 @@ Files take priority over environment variables. Whitespace is trimmed.
 | `OURA_ENCRYPTION_KEY` | — | Fallback if secret file not found |
 | `OURA_DB_PATH` | `data/oura.db` | SQLite database file path |
 | `OURA_LISTEN_ADDR` | `0.0.0.0:8080` | Server bind address |
+| `OURA_BASE_URL` | _(computed)_ | External base URL for OAuth redirect (e.g. `https://your-server.ts.net`) |
 | `OURA_FETCH_INTERVAL` | `6h` | Periodic background sync interval |
 | `OURA_SECRETS_DIR` | `/run/secrets` | Override secret files directory |
 
