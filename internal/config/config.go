@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ type Config struct {
 	EncryptionKey string
 	DBPath        string
 	ListenAddr    string
+	BaseURL       string
 	FetchInterval time.Duration
 	SecretsDir    string
 }
@@ -29,6 +31,7 @@ func Load() (*Config, error) {
 		EncryptionKey: secretOrEnv(secretsDir, "oura_encryption_key", "OURA_ENCRYPTION_KEY"),
 		DBPath:        envOrDefault("OURA_DB_PATH", "data/oura.db"),
 		ListenAddr:    envOrDefault("OURA_LISTEN_ADDR", "0.0.0.0:8080"),
+		BaseURL:       envOrDefault("OURA_BASE_URL", ""),
 		SecretsDir:    secretsDir,
 	}
 
@@ -51,6 +54,18 @@ func (c *Config) Validate() error {
 	}
 	if c.EncryptionKey == "" {
 		return fmt.Errorf("OURA_ENCRYPTION_KEY is required (set env var or create %s/oura_encryption_key)", c.SecretsDir)
+	}
+	if c.BaseURL != "" {
+		u, err := url.Parse(c.BaseURL)
+		if err != nil {
+			return fmt.Errorf("OURA_BASE_URL is not a valid URL: %w", err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("OURA_BASE_URL must use http or https scheme, got %q", u.Scheme)
+		}
+		if u.Path != "" && u.Path != "/" {
+			return fmt.Errorf("OURA_BASE_URL must not contain a path, got %q", c.BaseURL)
+		}
 	}
 	return nil
 }
