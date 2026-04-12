@@ -3,14 +3,14 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:8080"
+      - "8090:8080"
     volumes:
       - oura-data:/data
       - ./secrets:/run/secrets:ro
     environment:
       - OURA_LISTEN_ADDR=0.0.0.0:8080
       - OURA_FETCH_INTERVAL=6h
-      # - OURA_BASE_URL=https://your-server.tail1234.ts.net
+      - OURA_BASE_URL=https://ivans-mac-mini.tail111a35.ts.net
 
 volumes:
   oura-data:

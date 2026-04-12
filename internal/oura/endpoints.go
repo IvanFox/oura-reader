@@ -24,7 +24,7 @@ var Registry = []EndpointSpec{
 	{Name: "daily_stress", Path: "/v2/usercollection/daily_stress", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "daily_spo2", Path: "/v2/usercollection/daily_spo2", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "daily_cardiovascular_age", Path: "/v2/usercollection/daily_cardiovascular_age", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
-	{Name: "vo2_max", Path: "/v2/usercollection/vo2_max", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
+	{Name: "vo2_max", Path: "/v2/usercollection/vO2_max", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "workout", Path: "/v2/usercollection/workout", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "session", Path: "/v2/usercollection/session", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "tag", Path: "/v2/usercollection/tag", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
