@@ -284,6 +284,10 @@ with OuraClient(base_url="http://your-server:8080", api_key="oura_ak_...") as cl
 | `auth_status()` | `dict` | OAuth status |
 | `health()` | `dict` | Server health |
 
+## MCP Server
+
+- **MCP server** — [`clients/mcp/`](clients/mcp/) — expose the API to AI agents (Claude Desktop, Cursor, …) via the Model Context Protocol.
+
 ## Configuration Reference
 
 ### Secrets (file-based, preferred)
