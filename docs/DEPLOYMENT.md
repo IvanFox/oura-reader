@@ -128,6 +128,12 @@ To trigger an immediate sync, restart the container (the scheduler syncs on star
 docker compose restart
 ```
 
+## 8. Connect an MCP client (optional)
+
+Once the server is running and a user has completed OAuth, you can expose all 18 Oura data endpoints to AI agents via the Model Context Protocol.
+
+See [`clients/mcp/README.md`](../clients/mcp/README.md) for install and client-configuration instructions (Claude Desktop, Claude Code, Cursor).
+
 ## Troubleshooting
 
 - **"redirect_uri mismatch" from Oura**: The `OURA_BASE_URL` does not match the redirect URI registered in the Oura portal. Check protocol (`https://`), hostname, and ensure there is no trailing slash.
