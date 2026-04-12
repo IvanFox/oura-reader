@@ -1,4 +1,4 @@
-.PHONY: build run test lint clean docker docker-run help
+.PHONY: build run test lint clean docker docker-run check-endpoints help
 
 build:
 	go build -o bin/oura-reader ./cmd/oura-reader
@@ -24,6 +24,9 @@ docker-run:
 docker-stop:
 	docker compose down
 
+check-endpoints:
+	cd clients/mcp && . .venv/bin/activate && python scripts/check_endpoints.py
+
 help:
 	@echo "build      - Build the binary"
 	@echo "run        - Build and run the server"
@@ -33,3 +36,4 @@ help:
 	@echo "docker     - Build Docker image"
 	@echo "docker-run - Start via docker compose"
 	@echo "docker-stop- Stop via docker compose"
+	@echo "check-endpoints - Verify Python MCP registry matches Go registry"
