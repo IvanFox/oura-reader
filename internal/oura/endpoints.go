@@ -4,12 +4,13 @@ const baseURL = "https://api.ouraring.com"
 
 // EndpointSpec describes a single Oura API v2 endpoint.
 type EndpointSpec struct {
-	Name     string // e.g. "daily_sleep"
-	Path     string // e.g. "/v2/usercollection/daily_sleep"
-	HasDates bool   // supports start_date/end_date query params
-	IsList   bool   // returns paginated list vs single object
-	IDField  string // JSON field to use as oura_id ("id", "" for none)
-	DayField string // JSON field to use as day ("day", "timestamp", "")
+	Name         string // e.g. "daily_sleep"
+	Path         string // e.g. "/v2/usercollection/daily_sleep"
+	HasDates     bool   // supports date-range filtering (see UsesDatetime for param names)
+	IsList       bool   // returns paginated list vs single object
+	IDField      string // JSON field to use as oura_id ("id", "" for none)
+	DayField     string // JSON field to use as day ("day", "timestamp", "")
+	UsesDatetime bool   // filter via start_datetime/end_datetime (time-series endpoints); Oura ignores start_date/end_date on these
 }
 
 // Registry contains all Oura API v2 endpoints.
@@ -19,7 +20,7 @@ var Registry = []EndpointSpec{
 	{Name: "sleep_time", Path: "/v2/usercollection/sleep_time", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "daily_activity", Path: "/v2/usercollection/daily_activity", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "daily_readiness", Path: "/v2/usercollection/daily_readiness", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
-	{Name: "heartrate", Path: "/v2/usercollection/heartrate", HasDates: true, IsList: true, IDField: "", DayField: "timestamp"},
+	{Name: "heartrate", Path: "/v2/usercollection/heartrate", HasDates: true, IsList: true, IDField: "", DayField: "timestamp", UsesDatetime: true},
 	{Name: "daily_resilience", Path: "/v2/usercollection/daily_resilience", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "daily_stress", Path: "/v2/usercollection/daily_stress", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
 	{Name: "daily_spo2", Path: "/v2/usercollection/daily_spo2", HasDates: true, IsList: true, IDField: "id", DayField: "day"},
