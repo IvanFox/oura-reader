@@ -23,11 +23,13 @@ class GoSpec:
     has_day_field: bool
 
 
+# Fields are matched by name, so their order within the struct literal and any
+# additional fields (e.g. UsesDatetime) don't affect parsing.
 _SPEC_RE = re.compile(
     r'\{\s*Name:\s*"(?P<name>[^"]+)",'
     r'.*?HasDates:\s*(?P<has_dates>true|false),'
     r'.*?IsList:\s*(?P<is_list>true|false),'
-    r'.*?DayField:\s*"(?P<day_field>[^"]*)"\s*\}',
+    r'.*?DayField:\s*"(?P<day_field>[^"]*)"',
     re.DOTALL,
 )
 

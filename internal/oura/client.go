@@ -104,11 +104,26 @@ func (c *Client) buildURL(spec EndpointSpec, startDate, endDate, nextToken strin
 	u := baseURL + spec.Path
 	params := url.Values{}
 	if spec.HasDates {
-		if startDate != "" {
-			params.Set("start_date", startDate)
+		startParam, endParam := "start_date", "end_date"
+		start, end := startDate, endDate
+		if spec.UsesDatetime {
+			// Time-series endpoints (heartrate) filter by datetime, not date.
+			// Oura silently ignores start_date/end_date on these, returning an
+			// unfiltered window. Widen each bound to cover the whole day so the
+			// range stays inclusive, matching the date endpoints' semantics.
+			startParam, endParam = "start_datetime", "end_datetime"
+			if start != "" {
+				start += "T00:00:00"
+			}
+			if end != "" {
+				end += "T23:59:59"
+			}
 		}
-		if endDate != "" {
-			params.Set("end_date", endDate)
+		if start != "" {
+			params.Set(startParam, start)
+		}
+		if end != "" {
+			params.Set(endParam, end)
 		}
 	}
 	if nextToken != "" {
