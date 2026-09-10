@@ -64,9 +64,27 @@ class OuraReaderClient:
             params["limit"] = str(limit)
         return await self._request("GET", f"/api/v1/data/{endpoint}", params=params)
 
-    async def sync(self, endpoint: str | None = None) -> dict[str, Any]:
+    async def sync(
+        self,
+        endpoint: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
         path = f"/api/v1/sync/{endpoint}" if endpoint else "/api/v1/sync"
-        return await self._request("POST", path)
+        params: dict[str, str] = {}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        result = await self._request("POST", path, params=params or None)
+        if params and "records" not in result:
+            # An oura-reader without range support ignores the dates and runs a
+            # plain incremental sync. Say so instead of pretending it backfilled.
+            result["warning"] = (
+                "server ignored start_date/end_date (oura-reader without backfill "
+                "support?) — an incremental sync ran instead"
+            )
+        return result
 
     async def sync_status(self) -> dict[str, Any]:
         return await self._request("GET", "/api/v1/sync/status")

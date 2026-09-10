@@ -95,6 +95,20 @@ async def test_dispatch_sync_endpoint_maps_to_client():
     assert fake.calls == [("sync", (), {"endpoint": "daily_sleep"})]
 
 
+def test_sync_endpoint_schema_exposes_backfill_range():
+    tools = {t.name: t for t in build_tool_definitions()}
+    props = tools["sync_endpoint"].inputSchema["properties"]
+    assert "YYYY-MM-DD" in props["start_date"]["description"]
+    assert "YYYY-MM-DD" in props["end_date"]["description"]
+    assert tools["sync_endpoint"].inputSchema["required"] == ["endpoint"]
+
+
+async def test_dispatch_sync_endpoint_passes_backfill_range():
+    fake = FakeClient()
+    await dispatch("sync_endpoint", {"endpoint": "sleep", "start_date": "2026-04-01", "end_date": "2026-09-10"}, fake)
+    assert fake.calls == [("sync", (), {"endpoint": "sleep", "start_date": "2026-04-01", "end_date": "2026-09-10"})]
+
+
 async def test_dispatch_unknown_tool_raises():
     fake = FakeClient()
     with pytest.raises(KeyError):
