@@ -46,7 +46,12 @@ def _meta_tools() -> list[Tool]:
         ),
         Tool(
             name="sync_endpoint",
-            description="Trigger a sync for a single endpoint. Fire-and-forget; poll sync_status for progress.",
+            description=(
+                "Trigger a sync for a single endpoint. Without dates: incremental sync from the "
+                "last cursor. With start_date (end_date optional, defaults to today): re-fetch "
+                "exactly that range from Oura and return per-endpoint record counts; the "
+                "incremental cursor is not moved. Use it to backfill missing days."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -55,6 +60,8 @@ def _meta_tools() -> list[Tool]:
                         "enum": list(ENDPOINT_NAMES),
                         "description": "Name of the Oura endpoint to sync.",
                     },
+                    "start_date": {"type": "string", "description": f"Backfill range start. {_DATE_DESC}"},
+                    "end_date": {"type": "string", "description": f"Backfill range end (inclusive). {_DATE_DESC}"},
                 },
                 "required": ["endpoint"],
                 "additionalProperties": False,
@@ -90,7 +97,11 @@ async def dispatch(name: str, args: dict[str, Any], client) -> dict[str, Any]:
     if name == "sync":
         return await client.sync()
     if name == "sync_endpoint":
-        return await client.sync(endpoint=args["endpoint"])
+        kwargs: dict[str, Any] = {"endpoint": args["endpoint"]}
+        for key in ("start_date", "end_date"):
+            if args.get(key):
+                kwargs[key] = args[key]
+        return await client.sync(**kwargs)
     if name == "sync_status":
         return await client.sync_status()
     raise KeyError(name)

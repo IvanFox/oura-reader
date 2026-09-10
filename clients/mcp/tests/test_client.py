@@ -27,6 +27,36 @@ async def test_get_data_sends_bearer_token(client):
 
 
 @respx.mock
+async def test_sync_endpoint_without_dates_sends_no_params(client):
+    route = respx.post("https://api.example/api/v1/sync/sleep").mock(
+        return_value=httpx.Response(200, json={"status": "ok", "endpoint": "sleep"})
+    )
+    result = await client.sync(endpoint="sleep")
+    assert dict(route.calls.last.request.url.params) == {}
+    assert "warning" not in result
+
+
+@respx.mock
+async def test_sync_endpoint_backfill_passes_range(client):
+    route = respx.post("https://api.example/api/v1/sync/sleep").mock(
+        return_value=httpx.Response(200, json={"status": "ok", "records": {"sleep": 160}})
+    )
+    result = await client.sync(endpoint="sleep", start_date="2026-04-01", end_date="2026-09-10")
+    assert dict(route.calls.last.request.url.params) == {"start_date": "2026-04-01", "end_date": "2026-09-10"}
+    assert result["records"] == {"sleep": 160}
+    assert "warning" not in result
+
+
+@respx.mock
+async def test_sync_backfill_warns_when_server_ignores_range(client):
+    respx.post("https://api.example/api/v1/sync/sleep").mock(
+        return_value=httpx.Response(200, json={"status": "ok", "endpoint": "sleep"})
+    )
+    result = await client.sync(endpoint="sleep", start_date="2026-04-01")
+    assert "warning" in result
+
+
+@respx.mock
 async def test_get_data_passes_date_range_and_limit(client):
     route = respx.get("https://api.example/api/v1/data/daily_sleep").mock(
         return_value=httpx.Response(200, json={"data": []})

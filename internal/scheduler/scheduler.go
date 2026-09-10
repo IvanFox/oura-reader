@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -131,9 +132,27 @@ func (s *Scheduler) syncEndpoint(ctx context.Context, userID int64, spec oura.En
 		}
 	}
 
-	records, err := s.client.Fetch(ctx, userID, spec, startDate, today)
+	n, err := s.fetchAndStore(ctx, userID, spec, startDate, today)
 	if err != nil {
 		return err
+	}
+
+	if spec.HasDates {
+		if err := s.store.SetSyncState(ctx, userID, spec.Name, today); err != nil {
+			return fmt.Errorf("set sync state: %w", err)
+		}
+	}
+
+	slog.Info("synced endpoint", "endpoint", spec.Name, "user_id", userID, "records", n)
+	return nil
+}
+
+// fetchAndStore fetches [startDate, endDate] from Oura and upserts every record.
+// Returns the number of records received.
+func (s *Scheduler) fetchAndStore(ctx context.Context, userID int64, spec oura.EndpointSpec, startDate, endDate string) (int, error) {
+	records, err := s.client.Fetch(ctx, userID, spec, startDate, endDate)
+	if err != nil {
+		return 0, err
 	}
 
 	for _, raw := range records {
@@ -146,16 +165,83 @@ func (s *Scheduler) syncEndpoint(ctx context.Context, userID int64, spec oura.En
 		}
 
 		if err := s.store.UpsertOuraData(ctx, userID, spec.Name, day, ouraID, json.RawMessage(raw)); err != nil {
-			return fmt.Errorf("upsert: %w", err)
+			return 0, fmt.Errorf("upsert: %w", err)
 		}
 	}
+	return len(records), nil
+}
 
-	if spec.HasDates {
-		if err := s.store.SetSyncState(ctx, userID, spec.Name, today); err != nil {
-			return fmt.Errorf("set sync state: %w", err)
+const dateLayout = "2006-01-02"
+
+// ParseRange validates an explicit backfill range. startDate is required,
+// endDate defaults to today. Both must be YYYY-MM-DD and start <= end.
+func ParseRange(startDate, endDate string, now time.Time) (string, string, error) {
+	if startDate == "" {
+		return "", "", errors.New("start_date is required")
+	}
+	start, err := time.Parse(dateLayout, startDate)
+	if err != nil {
+		return "", "", errors.New("start_date must be YYYY-MM-DD")
+	}
+	if endDate == "" {
+		endDate = now.Format(dateLayout)
+	}
+	end, err := time.Parse(dateLayout, endDate)
+	if err != nil {
+		return "", "", errors.New("end_date must be YYYY-MM-DD")
+	}
+	if end.Before(start) {
+		return "", "", errors.New("start_date must not be after end_date")
+	}
+	return startDate, endDate, nil
+}
+
+// BackfillEndpoints fetches an explicit date range for the given endpoints and
+// upserts it. It never touches sync_state, so the incremental cursor is not moved.
+//
+// The upstream end_date is widened by one day: Oura's sleep/sleep_time endpoints
+// do not return documents for the last day of a range (a start_date == end_date
+// window comes back empty). Upserts are idempotent, so the extra day is harmless
+// for the other endpoints. Returned counts include that extra day.
+func (s *Scheduler) BackfillEndpoints(ctx context.Context, userID int64, startDate, endDate string, endpoints ...string) (map[string]int, error) {
+	end, err := time.Parse(dateLayout, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid end_date: %w", err)
+	}
+	fetchEnd := end.AddDate(0, 0, 1).Format(dateLayout)
+
+	counts := make(map[string]int, len(endpoints))
+	var errs []error
+	for _, name := range endpoints {
+		spec, ok := oura.RegistryMap[name]
+		if !ok {
+			errs = append(errs, fmt.Errorf("unknown endpoint: %s", name))
+			continue
+		}
+		if !spec.HasDates {
+			errs = append(errs, fmt.Errorf("%s: endpoint has no date range", name))
+			continue
+		}
+		n, err := s.fetchAndStore(ctx, userID, spec, startDate, fetchEnd)
+		if err != nil {
+			slog.Error("backfill failed", "endpoint", name, "user_id", userID, "err", err)
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+			continue
+		}
+		counts[name] = n
+		slog.Info("backfilled endpoint", "endpoint", name, "user_id", userID,
+			"start_date", startDate, "end_date", endDate, "records", n)
+	}
+	return counts, errors.Join(errs...)
+}
+
+// BackfillUser backfills every date-ranged endpoint for a user.
+func (s *Scheduler) BackfillUser(ctx context.Context, userID int64, startDate, endDate string) (map[string]int, error) {
+	var names []string
+	for _, spec := range oura.Registry {
+		if spec.HasDates {
+			names = append(names, spec.Name)
 		}
 	}
-
-	slog.Info("synced endpoint", "endpoint", spec.Name, "user_id", userID, "records", len(records))
-	return nil
+	return s.BackfillEndpoints(ctx, userID, startDate, endDate, names...)
 }
