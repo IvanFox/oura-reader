@@ -117,22 +117,51 @@ func (s *Scheduler) SyncEndpoints(ctx context.Context, userID int64, endpoints .
 	return nil
 }
 
+const (
+	// firstSyncDays is how far back the very first sync of an endpoint reaches.
+	firstSyncDays = 30
+	// lookbackDays re-fetches this many days before the cursor on every
+	// incremental sync. Oura finalises documents late (the ring syncs hours
+	// after waking, sleep is re-scored), and upserts are idempotent, so the
+	// overlap is safe and catches anything a previous run missed.
+	lookbackDays = 7
+)
+
+// IncrementalRange returns the upstream [start, end] window for an incremental
+// sync. end is today+1 because Oura's sleep/sleep_time endpoints never return
+// documents for the last day of a range: a start == end == today window came
+// back empty on every run, which silently dropped almost every night.
+func IncrementalRange(lastSyncDate, today string) (string, string, error) {
+	t, err := time.Parse(dateLayout, today)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid today %q: %w", today, err)
+	}
+	end := t.AddDate(0, 0, 1).Format(dateLayout)
+
+	if lastSyncDate == "" {
+		return t.AddDate(0, 0, -firstSyncDays).Format(dateLayout), end, nil
+	}
+	last, err := time.Parse(dateLayout, lastSyncDate)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid last_sync_date %q: %w", lastSyncDate, err)
+	}
+	return last.AddDate(0, 0, -lookbackDays).Format(dateLayout), end, nil
+}
+
 func (s *Scheduler) syncEndpoint(ctx context.Context, userID int64, spec oura.EndpointSpec, today string) error {
-	startDate := ""
+	startDate, endDate := "", ""
 	if spec.HasDates {
 		lastDate, _, err := s.store.GetSyncState(ctx, userID, spec.Name)
 		if err != nil {
 			return fmt.Errorf("get sync state: %w", err)
 		}
-		if lastDate == "" {
-			// Default: 30 days ago for first sync.
-			startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
-		} else {
-			startDate = lastDate
+		startDate, endDate, err = IncrementalRange(lastDate, today)
+		if err != nil {
+			return err
 		}
 	}
 
-	n, err := s.fetchAndStore(ctx, userID, spec, startDate, today)
+	n, err := s.fetchAndStore(ctx, userID, spec, startDate, endDate)
 	if err != nil {
 		return err
 	}
