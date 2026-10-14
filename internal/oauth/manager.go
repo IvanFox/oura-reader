@@ -5,17 +5,21 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/oauth2"
 )
 
 const (
 	authURL  = "https://cloud.ouraring.com/oauth/authorize"
-	tokenURL = "https://api.ouraring.com/oauth/token"
+	// Apps registered on developer.ouraring.com (new portal) are rejected by the
+	// legacy https://api.ouraring.com/oauth/token with 400 invalid_request.
+	tokenURL = "https://moi.ouraring.com/oauth/v2/ext/oauth-token"
 )
 
 var ouraScopes = []string{
@@ -24,10 +28,16 @@ var ouraScopes = []string{
 	"stress", "heart_health", "ring_configuration",
 }
 
+const refreshTimeout = 30 * time.Second
+
 type Manager struct {
 	conf  *oauth2.Config
 	store *Store
-	mu    sync.Mutex
+
+	// sources holds one token source per user so concurrent callers never
+	// refresh with the same single-use refresh token.
+	sources map[int64]*persistingTokenSource
+	mu      sync.Mutex
 
 	// pendingStates maps state → userID for in-progress OAuth flows.
 	pendingStates map[string]int64
@@ -48,6 +58,7 @@ func NewManager(clientID, clientSecret, baseURL string, store *Store) *Manager {
 			Scopes:      ouraScopes,
 		},
 		store:         store,
+		sources:       make(map[int64]*persistingTokenSource),
 		pendingStates: make(map[string]int64),
 	}
 }
@@ -95,11 +106,30 @@ func (m *Manager) Exchange(ctx context.Context, state, code string) (int64, erro
 		return 0, fmt.Errorf("save token: %w", err)
 	}
 
+	m.mu.Lock()
+	delete(m.sources, userID)
+	m.mu.Unlock()
+
 	return userID, nil
 }
 
 // HTTPClientForUser returns an HTTP client with automatic token refresh for a user.
 func (m *Manager) HTTPClientForUser(ctx context.Context, userID int64) (*http.Client, error) {
+	src, err := m.tokenSource(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return oauth2.NewClient(ctx, src), nil
+}
+
+func (m *Manager) tokenSource(ctx context.Context, userID int64) (*persistingTokenSource, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if src, ok := m.sources[userID]; ok {
+		return src, nil
+	}
+
 	token, err := m.store.LoadToken(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("load token for user %d: %w", userID, err)
@@ -108,13 +138,17 @@ func (m *Manager) HTTPClientForUser(ctx context.Context, userID int64) (*http.Cl
 		return nil, fmt.Errorf("no OAuth token for user %d", userID)
 	}
 
-	// Create a token source that persists refreshed tokens.
+	// Detached from ctx: Oura rotates the refresh token on receipt, so a refresh
+	// aborted by a disconnecting caller would lose the new pair.
+	refreshCtx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Timeout: refreshTimeout})
 	src := &persistingTokenSource{
-		base:   m.conf.TokenSource(ctx, token),
-		store:  m.store,
-		userID: userID,
+		base:           m.conf.TokenSource(refreshCtx, token),
+		store:          m.store,
+		userID:         userID,
+		persistedToken: token.AccessToken,
 	}
-	return oauth2.NewClient(ctx, src), nil
+	m.sources[userID] = src
+	return src, nil
 }
 
 // HasToken checks if a user has an OAuth token stored.
@@ -139,7 +173,9 @@ type persistingTokenSource struct {
 	base   oauth2.TokenSource
 	store  *Store
 	userID int64
-	mu     sync.Mutex
+
+	mu             sync.Mutex
+	persistedToken string // access token last written to the store
 }
 
 func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
@@ -150,13 +186,17 @@ func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Persist the token in case it was refreshed (new refresh token).
-	if err := s.store.SaveToken(context.Background(), s.userID, token); err != nil {
-		// Log but don't fail — the token is still usable.
-		fmt.Printf("warning: failed to persist refreshed token for user %d: %v\n", s.userID, err)
+	if token.AccessToken == s.persistedToken {
+		return token, nil
 	}
 
+	if err := s.store.SaveToken(context.Background(), s.userID, token); err != nil {
+		// The in-memory token is still usable; saving is retried on the next call.
+		slog.Error("failed to persist refreshed oauth token", "user_id", s.userID, "err", err)
+		return token, nil
+	}
+	s.persistedToken = token.AccessToken
+	slog.Info("oauth token refreshed", "user_id", s.userID, "expiry", token.Expiry)
 	return token, nil
 }
 
